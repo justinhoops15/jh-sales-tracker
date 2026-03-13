@@ -1,0 +1,11 @@
+{
+  "name": "sales-tracker-bot",
+  "version": "1.0.0",
+  "description": "Discord sales tracker bot",
+  "main": "index.js",
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "sqlite3": "^5.1.6",
+    "node-cron": "^3.0.3"
+  }
+}
