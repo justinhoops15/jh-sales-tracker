@@ -1,5 +1,6 @@
 const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes } = require('discord.js');
 const sqlite3 = require('sqlite3').verbose();
+const cron = require('node-cron');
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
@@ -35,6 +36,9 @@ const commands = [
 
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
+let weeklyTotals = {};
+let monthlyTotals = {};
+
 client.once('ready', async () => {
   console.log('Sales Tracker Bot is online');
 
@@ -48,6 +52,7 @@ client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   if (interaction.commandName === 'sale') {
+
     const agent = interaction.options.getString('name');
     const monthly = interaction.options.getInteger('monthly');
     const annual = interaction.options.getInteger('annual');
@@ -59,14 +64,31 @@ client.on('interactionCreate', async interaction => {
       [agent, monthly, annual, date]
     );
 
-  await interaction.reply(
+    if (!weeklyTotals[agent]) weeklyTotals[agent] = 0;
+    if (!monthlyTotals[agent]) monthlyTotals[agent] = 0;
+
+    weeklyTotals[agent] += annual;
+    monthlyTotals[agent] += annual;
+
+    await interaction.reply(
 `✅ **Sale Recorded**
 
 Agent: ${agent}
 Monthly Premium: $${monthly}/mo
 Annual Premium: $${annual} AP`
-);
+    );
+
   }
+});
+
+cron.schedule('0 0 * * 1', () => {
+  weeklyTotals = {};
+  console.log('Weekly leaderboard reset');
+});
+
+cron.schedule('0 0 1 * *', () => {
+  monthlyTotals = {};
+  console.log('Monthly leaderboard reset');
 });
 
 client.login(process.env.TOKEN);
