@@ -59,7 +59,13 @@ client.on('interactionCreate', async interaction => {
       [agent, monthly, annual, date]
     );
 
-    await interaction.reply(`✅ Sale recorded for **${agent}** — $${annual} AP`);
+  await interaction.reply(
+`✅ **Sale Recorded**
+
+Agent: ${agent}
+Monthly Premium: $${monthly}/mo
+Annual Premium: $${annual} AP`
+);
   }
 });
 
