@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes } = require('discord.js');
 const sqlite3 = require('sqlite3').verbose();
 
 const client = new Client({
@@ -15,8 +15,52 @@ db.run(`CREATE TABLE IF NOT EXISTS sales (
   date TEXT
 )`);
 
-client.once('ready', () => {
+const commands = [
+  new SlashCommandBuilder()
+    .setName('sale')
+    .setDescription('Record a sale')
+    .addStringOption(option =>
+      option.setName('name')
+        .setDescription('Agent name')
+        .setRequired(true))
+    .addIntegerOption(option =>
+      option.setName('monthly')
+        .setDescription('Monthly premium')
+        .setRequired(true))
+    .addIntegerOption(option =>
+      option.setName('annual')
+        .setDescription('Annual premium')
+        .setRequired(true))
+].map(command => command.toJSON());
+
+const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+
+client.once('ready', async () => {
   console.log('Sales Tracker Bot is online');
+
+  await rest.put(
+    Routes.applicationCommands(client.user.id),
+    { body: commands },
+  );
+});
+
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isChatInputCommand()) return;
+
+  if (interaction.commandName === 'sale') {
+    const agent = interaction.options.getString('name');
+    const monthly = interaction.options.getInteger('monthly');
+    const annual = interaction.options.getInteger('annual');
+
+    const date = new Date().toISOString();
+
+    db.run(
+      `INSERT INTO sales(agent, monthly, annual, date) VALUES(?,?,?,?)`,
+      [agent, monthly, annual, date]
+    );
+
+    await interaction.reply(`✅ Sale recorded for **${agent}** — $${annual} AP`);
+  }
 });
 
 client.login(process.env.TOKEN);
