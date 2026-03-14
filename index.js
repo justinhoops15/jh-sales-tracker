@@ -88,9 +88,9 @@ client.on('interactionCreate', async interaction => {
 
     weeklyTotals[agent] += annual;
     monthlyTotals[agent] += annual;
-
+   
     updateLeaderboard(WEEKLY_CHANNEL, weeklyTotals, "Weekly Leaderboard");
-updateLeaderboard(MONTHLY_CHANNEL, monthlyTotals, "Monthly AP Leaderboard");
+    updateLeaderboard(MONTHLY_CHANNEL, monthlyTotals, "Monthly AP Leaderboard");
 
     await interaction.reply(
 `✅ **Sale Recorded**
