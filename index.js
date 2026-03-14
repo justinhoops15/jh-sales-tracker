@@ -1,3 +1,5 @@
+const WEEKLY_CHANNEL = "1482084042596810814";
+const MONTHLY_CHANNEL = "1482084154459029544";
 const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes } = require('discord.js');
 const sqlite3 = require('sqlite3').verbose();
 const cron = require('node-cron');
@@ -39,6 +41,23 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 let weeklyTotals = {};
 let monthlyTotals = {};
 
+async function updateLeaderboard(channelId, totals, title) {
+
+  const channel = await client.channels.fetch(channelId);
+
+  const sorted = Object.entries(totals)
+    .sort((a,b) => b[1] - a[1])
+    .slice(0,10);
+
+  let message = `🏆 **${title}**\n\n`;
+
+  sorted.forEach((entry, index) => {
+    message += `${index+1}. ${entry[0]} — $${entry[1]}\n`;
+  });
+
+  channel.send(message);
+}
+
 client.once('ready', async () => {
   console.log('Sales Tracker Bot is online');
 
@@ -69,6 +88,9 @@ client.on('interactionCreate', async interaction => {
 
     weeklyTotals[agent] += annual;
     monthlyTotals[agent] += annual;
+
+    updateLeaderboard(WEEKLY_CHANNEL, weeklyTotals, "Weekly Leaderboard");
+updateLeaderboard(MONTHLY_CHANNEL, monthlyTotals, "Monthly AP Leaderboard");
 
     await interaction.reply(
 `✅ **Sale Recorded**
