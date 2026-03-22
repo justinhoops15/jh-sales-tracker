@@ -51,6 +51,9 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 let weeklyTotals = {};
 let monthlyTotals = {};
 
+let weeklyMessageId = null;
+let monthlyMessageId = null;
+
 function getWeekRange() {
   const now = new Date();
 
@@ -78,7 +81,7 @@ function getMonthLabel() {
   return `${month} ${year}`;
 }
 
-async function updateLeaderboard(channelId, totals, title) {
+async function updateLeaderboard(channelId, totals, title, type) {
 
   const channel = await client.channels.fetch(channelId);
 
@@ -86,19 +89,41 @@ async function updateLeaderboard(channelId, totals, title) {
     .sort((a,b) => b[1] - a[1])
     .slice(0,10);
 
+  const medals = ["🥇", "🥈", "🥉"];
+
   let message = `🏆 **${title}**\n\n`;
 
   sorted.forEach((entry, index) => {
-    const medals = ["🥇", "🥈", "🥉"];
-
-if (index < 3) {
-  message += `${medals[index]} ${entry[0]} — $${entry[1]}\n`;
-} else {
-  message += `${index+1}. ${entry[0]} — $${entry[1]}\n`;
-}
+    if (index < 3) {
+      message += `${medals[index]} ${entry[0]} — $${entry[1]}\n`;
+    } else {
+      message += `${index+1}. ${entry[0]} — $${entry[1]}\n`;
+    }
   });
 
-  channel.send(message);
+  try {
+    let msg;
+
+    if (type === 'weekly' && weeklyMessageId) {
+      msg = await channel.messages.fetch(weeklyMessageId);
+      await msg.edit(message);
+    } else if (type === 'monthly' && monthlyMessageId) {
+      msg = await channel.messages.fetch(monthlyMessageId);
+      await msg.edit(message);
+    } else {
+      msg = await channel.send(message);
+
+      if (type === 'weekly') weeklyMessageId = msg.id;
+      if (type === 'monthly') monthlyMessageId = msg.id;
+    }
+
+  } catch (err) {
+    // If message was deleted, resend it
+    const msg = await channel.send(message);
+
+    if (type === 'weekly') weeklyMessageId = msg.id;
+    if (type === 'monthly') monthlyMessageId = msg.id;
+  }
 }
 
 
@@ -160,8 +185,8 @@ client.on('interactionCreate', async interaction => {
         const saleId = this.lastID;
 
         // update leaderboards
-        updateLeaderboard(WEEKLY_CHANNEL, weeklyTotals, "Weekly Leaderboard");
-        updateLeaderboard(MONTHLY_CHANNEL, monthlyTotals, "Monthly AP Leaderboard");
+        updateLeaderboard(WEEKLY_CHANNEL, weeklyTotals, "Weekly Leaderboard", "weekly");
+        updateLeaderboard(MONTHLY_CHANNEL, monthlyTotals, "Monthly AP Leaderboard", "monthly");
 
         // reply with ID
 const embed = new EmbedBuilder()
@@ -199,8 +224,8 @@ interaction.reply({ embeds: [embed] });
 
       db.run(`DELETE FROM sales WHERE id = ?`, [id]);
 
-      updateLeaderboard(WEEKLY_CHANNEL, weeklyTotals, "Weekly Leaderboard");
-      updateLeaderboard(MONTHLY_CHANNEL, monthlyTotals, "Monthly AP Leaderboard");
+      updateLeaderboard(WEEKLY_CHANNEL, weeklyTotals, "Weekly Leaderboard", "weekly");
+      updateLeaderboard(MONTHLY_CHANNEL, monthlyTotals, "Monthly AP Leaderboard", "monthly");
 
       // silent confirmation
       interaction.reply({ content: `Sale #${id} deleted`, ephemeral: true });
@@ -218,7 +243,7 @@ await postFinalLeaderboard(WEEKLY_HISTORY, weeklyTotals, `Weekly Leaderboard (${
 
   weeklyTotals = {};
 
-  updateLeaderboard(WEEKLY_CHANNEL, weeklyTotals, "Weekly Leaderboard");
+  updateLeaderboard(WEEKLY_CHANNEL, weeklyTotals, "Weekly Leaderboard", "weekly");
 
   console.log('Weekly leaderboard reset');
 
@@ -231,7 +256,7 @@ await postFinalLeaderboard(MONTHLY_HISTORY, monthlyTotals, `${monthLabel} Leader
 
   monthlyTotals = {};
 
-  updateLeaderboard(MONTHLY_CHANNEL, monthlyTotals, "Monthly AP Leaderboard");
+  updateLeaderboard(MONTHLY_CHANNEL, monthlyTotals, "Monthly AP Leaderboard", "monthly");
 
   console.log('Monthly leaderboard reset');
 
