@@ -1,5 +1,7 @@
 const WEEKLY_CHANNEL = "1482084042596810814";
 const MONTHLY_CHANNEL = "1482084154459029544";
+const WEEKLY_HISTORY = "1482171225512869889";
+const MONTHLY_HISTORY = "1482171288918167765";
 const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes } = require('discord.js');
 const sqlite3 = require('sqlite3').verbose();
 const cron = require('node-cron');
@@ -50,6 +52,23 @@ async function updateLeaderboard(channelId, totals, title) {
     .slice(0,10);
 
   let message = `🏆 **${title}**\n\n`;
+
+  sorted.forEach((entry, index) => {
+    message += `${index+1}. ${entry[0]} — $${entry[1]}\n`;
+  });
+
+  channel.send(message);
+}
+
+
+async function postFinalLeaderboard(channelId, totals, title) {
+
+  const channel = await client.channels.fetch(channelId);
+
+  const sorted = Object.entries(totals)
+    .sort((a,b) => b[1] - a[1]);
+
+  let message = `📊 **${title} (Final Results)**\n\n`;
 
   sorted.forEach((entry, index) => {
     message += `${index+1}. ${entry[0]} — $${entry[1]}\n`;
