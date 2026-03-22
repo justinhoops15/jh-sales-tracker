@@ -2,7 +2,7 @@ const WEEKLY_CHANNEL = "1482084042596810814";
 const MONTHLY_CHANNEL = "1482084154459029544";
 const WEEKLY_HISTORY = "1482171225512869889";
 const MONTHLY_HISTORY = "1482171288918167765";
-const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes } = require('discord.js');
+const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder } = require('discord.js');
 const sqlite3 = require('sqlite3').verbose();
 const cron = require('node-cron');
 
@@ -89,7 +89,13 @@ async function updateLeaderboard(channelId, totals, title) {
   let message = `🏆 **${title}**\n\n`;
 
   sorted.forEach((entry, index) => {
-    message += `${index+1}. ${entry[0]} — $${entry[1]}\n`;
+    const medals = ["🥇", "🥈", "🥉"];
+
+if (index < 3) {
+  message += `${medals[index]} ${entry[0]} — $${entry[1]}\n`;
+} else {
+  message += `${index+1}. ${entry[0]} — $${entry[1]}\n`;
+}
   });
 
   channel.send(message);
@@ -158,13 +164,17 @@ client.on('interactionCreate', async interaction => {
         updateLeaderboard(MONTHLY_CHANNEL, monthlyTotals, "Monthly AP Leaderboard");
 
         // reply with ID
-        interaction.reply(
-`✅ **Sale Recorded (#${saleId})**
+const embed = new EmbedBuilder()
+  .setColor(0xFFD700) // gold
+  .setTitle(`💰 Sale Recorded (#${saleId})`)
+  .addFields(
+    { name: 'Agent', value: agent, inline: true },
+    { name: 'Monthly', value: `$${monthly}/mo`, inline: true },
+    { name: 'Annual', value: `$${annual} AP`, inline: true }
+  )
+  .setTimestamp();
 
-Agent: ${agent}
-Monthly Premium: $${monthly}/mo
-Annual Premium: $${annual} AP`
-        );
+interaction.reply({ embeds: [embed] });
 
       }
     );
