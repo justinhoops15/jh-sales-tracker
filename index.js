@@ -35,7 +35,8 @@ const commands = [
     .addIntegerOption(option =>
       option.setName('annual')
         .setDescription('Annual premium')
-        .setRequired(true))
+        .setRequired(true)),
+  
   new SlashCommandBuilder()
   .setName('delete')
   .setDescription('Delete a sale')
