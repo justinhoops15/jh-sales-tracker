@@ -36,6 +36,13 @@ const commands = [
       option.setName('annual')
         .setDescription('Annual premium')
         .setRequired(true))
+  new SlashCommandBuilder()
+  .setName('delete')
+  .setDescription('Delete a sale')
+  .addIntegerOption(option =>
+    option.setName('id')
+      .setDescription('Sale ID')
+      .setRequired(true))
 ].map(command => command.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -116,6 +123,9 @@ client.once('ready', async () => {
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
+  // ======================
+  // SALE COMMAND
+  // ======================
   if (interaction.commandName === 'sale') {
 
     const agent = interaction.options.getString('name');
@@ -124,30 +134,71 @@ client.on('interactionCreate', async interaction => {
 
     const date = new Date().toISOString();
 
-    db.run(
-      `INSERT INTO sales(agent, monthly, annual, date) VALUES(?,?,?,?)`,
-      [agent, monthly, annual, date]
-    );
-
+    // initialize totals
     if (!weeklyTotals[agent]) weeklyTotals[agent] = 0;
     if (!monthlyTotals[agent]) monthlyTotals[agent] = 0;
 
+    // update totals
     weeklyTotals[agent] += annual;
     monthlyTotals[agent] += annual;
-   
-    updateLeaderboard(WEEKLY_CHANNEL, weeklyTotals, "Weekly Leaderboard");
-    updateLeaderboard(MONTHLY_CHANNEL, monthlyTotals, "Monthly AP Leaderboard");
 
-    await interaction.reply(
-`✅ **Sale Recorded**
+    // insert into database (ONLY ONCE)
+    db.run(
+      `INSERT INTO sales(agent, monthly, annual, date) VALUES(?,?,?,?)`,
+      [agent, monthly, annual, date],
+      function(err) {
+
+        if (err) return console.error(err);
+
+        const saleId = this.lastID;
+
+        // update leaderboards
+        updateLeaderboard(WEEKLY_CHANNEL, weeklyTotals, "Weekly Leaderboard");
+        updateLeaderboard(MONTHLY_CHANNEL, monthlyTotals, "Monthly AP Leaderboard");
+
+        // reply with ID
+        interaction.reply(
+`✅ **Sale Recorded (#${saleId})**
 
 Agent: ${agent}
 Monthly Premium: $${monthly}/mo
 Annual Premium: $${annual} AP`
-    );
+        );
 
+      }
+    );
   }
+
+  // ======================
+  // DELETE COMMAND
+  // ======================
+  if (interaction.commandName === 'delete') {
+
+    const id = interaction.options.getInteger('id');
+
+    db.get(`SELECT * FROM sales WHERE id = ?`, [id], (err, row) => {
+
+      if (!row) {
+        return interaction.reply({ content: 'Sale not found', ephemeral: true });
+      }
+
+      // subtract from totals
+      if (weeklyTotals[row.agent]) weeklyTotals[row.agent] -= row.annual;
+      if (monthlyTotals[row.agent]) monthlyTotals[row.agent] -= row.annual;
+
+      db.run(`DELETE FROM sales WHERE id = ?`, [id]);
+
+      updateLeaderboard(WEEKLY_CHANNEL, weeklyTotals, "Weekly Leaderboard");
+      updateLeaderboard(MONTHLY_CHANNEL, monthlyTotals, "Monthly AP Leaderboard");
+
+      // silent confirmation
+      interaction.reply({ content: `Sale #${id} deleted`, ephemeral: true });
+
+    });
+  }
+
 });
+
 
 cron.schedule('0 0 * * 1', async () => {
 
