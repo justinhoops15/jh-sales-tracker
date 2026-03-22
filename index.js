@@ -116,7 +116,7 @@ client.once('ready', async () => {
   console.log('Sales Tracker Bot is online');
 
   await rest.put(
-    Routes.applicationCommands(client.user.id),
+    Routes.applicationCommands(client.user.id, "1325862542786039849"),
     { body: commands },
   );
 });
