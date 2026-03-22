@@ -43,6 +43,21 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 let weeklyTotals = {};
 let monthlyTotals = {};
 
+function getWeekRange() {
+  const now = new Date();
+
+  // Get Monday of LAST week (since reset runs Monday)
+  const start = new Date(now);
+  start.setDate(now.getDate() - now.getDay() - 6);
+
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+
+  const month = start.toLocaleString('en-US', { month: 'long' });
+
+  return `${month} ${start.getDate()}-${end.getDate()}`;
+}
+
 async function updateLeaderboard(channelId, totals, title) {
 
   const channel = await client.channels.fetch(channelId);
@@ -124,7 +139,8 @@ Annual Premium: $${annual} AP`
 
 cron.schedule('0 0 * * 1', async () => {
 
-  await postFinalLeaderboard(WEEKLY_HISTORY, weeklyTotals, "Weekly Leaderboard");
+  const weekRange = getWeekRange();
+await postFinalLeaderboard(WEEKLY_HISTORY, weeklyTotals, `Weekly Leaderboard (${weekRange})`);
 
   weeklyTotals = {};
 
