@@ -122,14 +122,28 @@ Annual Premium: $${annual} AP`
   }
 });
 
-cron.schedule('0 0 * * 1', () => {
+cron.schedule('0 0 * * 1', async () => {
+
+  await postFinalLeaderboard(WEEKLY_HISTORY, weeklyTotals, "Weekly Leaderboard");
+
   weeklyTotals = {};
+
+  updateLeaderboard(WEEKLY_CHANNEL, weeklyTotals, "Weekly Leaderboard");
+
   console.log('Weekly leaderboard reset');
+
 });
 
-cron.schedule('0 0 1 * *', () => {
+cron.schedule('0 0 1 * *', async () => {
+
+  await postFinalLeaderboard(MONTHLY_HISTORY, monthlyTotals, "Monthly AP Leaderboard");
+
   monthlyTotals = {};
+
+  updateLeaderboard(MONTHLY_CHANNEL, monthlyTotals, "Monthly AP Leaderboard");
+
   console.log('Monthly leaderboard reset');
+
 });
 
 client.login(process.env.TOKEN);
