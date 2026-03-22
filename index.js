@@ -58,6 +58,18 @@ function getWeekRange() {
   return `${month} ${start.getDate()}-${end.getDate()}`;
 }
 
+function getMonthLabel() {
+  const now = new Date();
+
+  // Get LAST month (since reset runs on the 1st)
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1);
+
+  const month = lastMonth.toLocaleString('en-US', { month: 'long' });
+  const year = lastMonth.getFullYear();
+
+  return `${month} ${year}`;
+}
+
 async function updateLeaderboard(channelId, totals, title) {
 
   const channel = await client.channels.fetch(channelId);
@@ -152,7 +164,8 @@ await postFinalLeaderboard(WEEKLY_HISTORY, weeklyTotals, `Weekly Leaderboard (${
 
 cron.schedule('0 0 1 * *', async () => {
 
-  await postFinalLeaderboard(MONTHLY_HISTORY, monthlyTotals, "Monthly AP Leaderboard");
+  const monthLabel = getMonthLabel();
+await postFinalLeaderboard(MONTHLY_HISTORY, monthlyTotals, `${monthLabel} Leaderboard`);
 
   monthlyTotals = {};
 
