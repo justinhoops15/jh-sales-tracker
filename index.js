@@ -85,12 +85,17 @@ async function updateLeaderboard(channelId, title, type) {
   let dateFilter;
 
   if (type === "weekly") {
-    const now = new Date();
-    const start = new Date(now);
-    start.setDate(now.getDate() - now.getDay() + 1);
-    start.setHours(0,0,0,0);
-    dateFilter = start.toISOString();
-  }
+  const now = new Date();
+
+  // Get Monday of THIS week (consistent)
+  const day = now.getDay(); // 0 = Sunday
+  const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+
+  const start = new Date(now.setDate(diff));
+  start.setHours(0,0,0,0);
+
+  dateFilter = start.toISOString();
+}
 
   if (type === "monthly") {
     const now = new Date();
