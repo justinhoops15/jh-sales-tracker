@@ -48,9 +48,6 @@ const commands = [
 
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
-let weeklyTotals = {};
-let monthlyTotals = {};
-
 let weeklyMessageId = null;
 let monthlyMessageId = null;
 
@@ -81,51 +78,75 @@ function getMonthLabel() {
   return `${month} ${year}`;
 }
 
-async function updateLeaderboard(channelId, totals, title, type) {
+async function updateLeaderboard(channelId, title, type) {
 
   const channel = await client.channels.fetch(channelId);
 
-  const sorted = Object.entries(totals)
-    .sort((a,b) => b[1] - a[1])
-    .slice(0,10);
+  let dateFilter;
 
-  const medals = ["🥇", "🥈", "🥉"];
-
-  let message = `🏆 **${title}**\n\n`;
-
-  sorted.forEach((entry, index) => {
-    if (index < 3) {
-      message += `${medals[index]} ${entry[0]} — $${entry[1]}\n`;
-    } else {
-      message += `${index+1}. ${entry[0]} — $${entry[1]}\n`;
-    }
-  });
-
-  try {
-    let msg;
-
-    if (type === 'weekly' && weeklyMessageId) {
-      msg = await channel.messages.fetch(weeklyMessageId);
-      await msg.edit(message);
-    } else if (type === 'monthly' && monthlyMessageId) {
-      msg = await channel.messages.fetch(monthlyMessageId);
-      await msg.edit(message);
-    } else {
-      msg = await channel.send(message);
-
-      if (type === 'weekly') weeklyMessageId = msg.id;
-      if (type === 'monthly') monthlyMessageId = msg.id;
-    }
-
-  } catch (err) {
-    // If message was deleted, resend it
-    const msg = await channel.send(message);
-
-    if (type === 'weekly') weeklyMessageId = msg.id;
-    if (type === 'monthly') monthlyMessageId = msg.id;
+  if (type === "weekly") {
+    const now = new Date();
+    const start = new Date(now);
+    start.setDate(now.getDate() - now.getDay() + 1);
+    start.setHours(0,0,0,0);
+    dateFilter = start.toISOString();
   }
-}
 
+  if (type === "monthly") {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    dateFilter = start.toISOString();
+  }
+
+  db.all(
+    `SELECT agent, SUM(annual) as total
+     FROM sales
+     WHERE date >= ?
+     GROUP BY agent
+     ORDER BY total DESC`,
+    [dateFilter],
+    async (err, rows) => {
+
+      if (err) return console.error(err);
+
+      const medals = ["🥇", "🥈", "🥉"];
+
+      let message = `🏆 **${title}**\n\n`;
+
+      rows.slice(0,10).forEach((row, index) => {
+        if (index < 3) {
+          message += `${medals[index]} ${row.agent} — $${row.total}\n`;
+        } else {
+          message += `${index+1}. ${row.agent} — $${row.total}\n`;
+        }
+      });
+
+      try {
+        let msg;
+
+        if (type === 'weekly' && weeklyMessageId) {
+          msg = await channel.messages.fetch(weeklyMessageId);
+          await msg.edit(message);
+        } else if (type === 'monthly' && monthlyMessageId) {
+          msg = await channel.messages.fetch(monthlyMessageId);
+          await msg.edit(message);
+        } else {
+          msg = await channel.send(message);
+
+          if (type === 'weekly') weeklyMessageId = msg.id;
+          if (type === 'monthly') monthlyMessageId = msg.id;
+        }
+
+      } catch {
+        const msg = await channel.send(message);
+
+        if (type === 'weekly') weeklyMessageId = msg.id;
+        if (type === 'monthly') monthlyMessageId = msg.id;
+      }
+
+    }
+  );
+}
 
 async function postFinalLeaderboard(channelId, totals, title) {
 
@@ -165,14 +186,7 @@ client.on('interactionCreate', async interaction => {
     const annual = interaction.options.getInteger('annual');
 
     const date = new Date().toISOString();
-
-    // initialize totals
-    if (!weeklyTotals[agent]) weeklyTotals[agent] = 0;
-    if (!monthlyTotals[agent]) monthlyTotals[agent] = 0;
-
-    // update totals
-    weeklyTotals[agent] += annual;
-    monthlyTotals[agent] += annual;
+    
 
     // insert into database (ONLY ONCE)
     db.run(
@@ -185,8 +199,8 @@ client.on('interactionCreate', async interaction => {
         const saleId = this.lastID;
 
         // update leaderboards
-        updateLeaderboard(WEEKLY_CHANNEL, weeklyTotals, "Weekly Leaderboard", "weekly");
-        updateLeaderboard(MONTHLY_CHANNEL, monthlyTotals, "Monthly AP Leaderboard", "monthly");
+        updateLeaderboard(WEEKLY_CHANNEL, "Weekly Leaderboard", "weekly");
+        updateLeaderboard(MONTHLY_CHANNEL, "Monthly AP Leaderboard", "monthly");
 
         // reply with ID
 const embed = new EmbedBuilder()
@@ -217,15 +231,12 @@ interaction.reply({ embeds: [embed] });
       if (!row) {
         return interaction.reply({ content: 'Sale not found', ephemeral: true });
       }
-
-      // subtract from totals
-      if (weeklyTotals[row.agent]) weeklyTotals[row.agent] -= row.annual;
-      if (monthlyTotals[row.agent]) monthlyTotals[row.agent] -= row.annual;
+      
 
       db.run(`DELETE FROM sales WHERE id = ?`, [id]);
 
-      updateLeaderboard(WEEKLY_CHANNEL, weeklyTotals, "Weekly Leaderboard", "weekly");
-      updateLeaderboard(MONTHLY_CHANNEL, monthlyTotals, "Monthly AP Leaderboard", "monthly");
+      updateLeaderboard(WEEKLY_CHANNEL, "Weekly Leaderboard", "weekly");
+      updateLeaderboard(MONTHLY_CHANNEL, "Monthly AP Leaderboard", "monthly");
 
       // silent confirmation
       interaction.reply({ content: `Sale #${id} deleted`, ephemeral: true });
@@ -239,11 +250,10 @@ interaction.reply({ embeds: [embed] });
 cron.schedule('0 0 * * 1', async () => {
 
   const weekRange = getWeekRange();
-await postFinalLeaderboard(WEEKLY_HISTORY, weeklyTotals, `Weekly Leaderboard (${weekRange})`);
 
-  weeklyTotals = {};
+  await postFinalLeaderboard(WEEKLY_HISTORY, {}, `Weekly Leaderboard (${weekRange})`);
 
-  updateLeaderboard(WEEKLY_CHANNEL, weeklyTotals, "Weekly Leaderboard", "weekly");
+  updateLeaderboard(WEEKLY_CHANNEL, "Weekly Leaderboard", "weekly");
 
   console.log('Weekly leaderboard reset');
 
@@ -252,11 +262,10 @@ await postFinalLeaderboard(WEEKLY_HISTORY, weeklyTotals, `Weekly Leaderboard (${
 cron.schedule('0 0 1 * *', async () => {
 
   const monthLabel = getMonthLabel();
-await postFinalLeaderboard(MONTHLY_HISTORY, monthlyTotals, `${monthLabel} Leaderboard`);
 
-  monthlyTotals = {};
+  await postFinalLeaderboard(MONTHLY_HISTORY, {}, `${monthLabel} Leaderboard`);
 
-  updateLeaderboard(MONTHLY_CHANNEL, monthlyTotals, "Monthly AP Leaderboard", "monthly");
+  updateLeaderboard(MONTHLY_CHANNEL, "Monthly AP Leaderboard", "monthly");
 
   console.log('Monthly leaderboard reset');
 
