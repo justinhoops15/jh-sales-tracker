@@ -148,20 +148,65 @@ async function updateLeaderboard(channelId, title, type) {
   );
 }
 
-async function postFinalLeaderboard(channelId, totals, title) {
+async function postFinalLeaderboard(channelId, title, type) {
 
   const channel = await client.channels.fetch(channelId);
 
-  const sorted = Object.entries(totals)
-    .sort((a,b) => b[1] - a[1]);
+  let startDate;
+  let endDate = new Date();
 
-  let message = `📊 **${title} (Final Results)**\n\n`;
+  if (type === "weekly") {
+    const now = new Date();
+    const end = new Date(now);
+    end.setDate(now.getDate() - now.getDay()); // last Sunday
+    end.setHours(23,59,59,999);
 
-  sorted.forEach((entry, index) => {
-    message += `${index+1}. ${entry[0]} — $${entry[1]}\n`;
-  });
+    const start = new Date(end);
+    start.setDate(end.getDate() - 6);
+    start.setHours(0,0,0,0);
 
-  channel.send(message);
+    startDate = start.toISOString();
+    endDate = end.toISOString();
+  }
+
+  if (type === "monthly") {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const end = new Date(now.getFullYear(), now.getMonth(), 0);
+
+    start.setHours(0,0,0,0);
+    end.setHours(23,59,59,999);
+
+    startDate = start.toISOString();
+    endDate = end.toISOString();
+  }
+
+  db.all(
+    `SELECT agent, SUM(annual) as total
+     FROM sales
+     WHERE date BETWEEN ? AND ?
+     GROUP BY agent
+     ORDER BY total DESC`,
+    [startDate, endDate],
+    async (err, rows) => {
+
+      if (err) return console.error(err);
+
+      const medals = ["🥇", "🥈", "🥉"];
+
+      let message = `📊 **${title}**\n\n`;
+
+      rows.slice(0,10).forEach((row, index) => {
+        if (index < 3) {
+          message += `${medals[index]} ${row.agent} — $${row.total}\n`;
+        } else {
+          message += `${index+1}. ${row.agent} — $${row.total}\n`;
+        }
+      });
+
+      channel.send(message);
+    }
+  );
 }
 
 client.once('ready', async () => {
@@ -251,7 +296,7 @@ cron.schedule('0 0 * * 1', async () => {
 
   const weekRange = getWeekRange();
 
-  await postFinalLeaderboard(WEEKLY_HISTORY, {}, `Weekly Leaderboard (${weekRange})`);
+  await postFinalLeaderboard(WEEKLY_HISTORY, `Weekly Leaderboard (${weekRange})`, "weekly");
 
   updateLeaderboard(WEEKLY_CHANNEL, "Weekly Leaderboard", "weekly");
 
@@ -263,7 +308,7 @@ cron.schedule('0 0 1 * *', async () => {
 
   const monthLabel = getMonthLabel();
 
-  await postFinalLeaderboard(MONTHLY_HISTORY, {}, `${monthLabel} Leaderboard`);
+  await postFinalLeaderboard(MONTHLY_HISTORY, `${monthLabel} Leaderboard`, "monthly");
 
   updateLeaderboard(MONTHLY_CHANNEL, "Monthly AP Leaderboard", "monthly");
 
