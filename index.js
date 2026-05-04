@@ -12,12 +12,20 @@ const client = new Client({
 
 const db = new sqlite3.Database('./sales.db');
 
+// Main sales table
 db.run(`CREATE TABLE IF NOT EXISTS sales (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   agent TEXT,
   monthly INTEGER,
   annual INTEGER,
   date TEXT
+)`);
+
+// NEW: Store current message IDs (persists across bot restarts)
+db.run(`CREATE TABLE IF NOT EXISTS leaderboard_messages (
+  type TEXT PRIMARY KEY,
+  message_id TEXT,
+  channel_id TEXT
 )`);
 
 const commands = [
@@ -48,9 +56,6 @@ const commands = [
 
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
-let weeklyMessageId = null;
-let monthlyMessageId = null;
-
 function getWeekRange() {
   const now = new Date();
 
@@ -76,6 +81,39 @@ function getMonthLabel() {
   const year = lastMonth.getFullYear();
 
   return `${month} ${year}`;
+}
+
+// NEW: Get stored message ID from database
+async function getStoredMessageId(type) {
+  return new Promise((resolve) => {
+    db.get(
+      `SELECT message_id FROM leaderboard_messages WHERE type = ?`,
+      [type],
+      (err, row) => {
+        if (err) console.error(err);
+        resolve(row ? row.message_id : null);
+      }
+    );
+  });
+}
+
+// NEW: Save message ID to database
+function saveMessageId(type, messageId, channelId) {
+  db.run(
+    `INSERT OR REPLACE INTO leaderboard_messages (type, message_id, channel_id) VALUES (?, ?, ?)`,
+    [type, messageId, channelId]
+  );
+}
+
+// NEW: Delete old message and clear from database
+async function deleteOldMessage(channelId, messageId) {
+  try {
+    const channel = await client.channels.fetch(channelId);
+    const msg = await channel.messages.fetch(messageId);
+    await msg.delete();
+  } catch (err) {
+    // Message already deleted or not found — that's OK
+  }
 }
 
 async function updateLeaderboard(channelId, title, type) {
@@ -127,26 +165,27 @@ async function updateLeaderboard(channelId, title, type) {
       });
 
       try {
+        // NEW: Get stored message ID from database
+        const storedMessageId = await getStoredMessageId(type);
+
         let msg;
 
-        if (type === 'weekly' && weeklyMessageId) {
-          msg = await channel.messages.fetch(weeklyMessageId);
-          await msg.edit(message);
-        } else if (type === 'monthly' && monthlyMessageId) {
-          msg = await channel.messages.fetch(monthlyMessageId);
-          await msg.edit(message);
+        if (storedMessageId) {
+          try {
+            msg = await channel.messages.fetch(storedMessageId);
+            await msg.edit(message);
+          } catch {
+            // Old message deleted — send new one
+            msg = await channel.send(message);
+            saveMessageId(type, msg.id, channelId);
+          }
         } else {
           msg = await channel.send(message);
-
-          if (type === 'weekly') weeklyMessageId = msg.id;
-          if (type === 'monthly') monthlyMessageId = msg.id;
+          saveMessageId(type, msg.id, channelId);
         }
 
-      } catch {
-        const msg = await channel.send(message);
-
-        if (type === 'weekly') weeklyMessageId = msg.id;
-        if (type === 'monthly') monthlyMessageId = msg.id;
+      } catch (err) {
+        console.error('Error updating leaderboard:', err);
       }
 
     }
@@ -214,7 +253,7 @@ async function postFinalLeaderboard(channelId, title, type) {
   );
 }
 
-client.once('ready', async () => {
+client.once('clientReady', async () => {
   console.log('Sales Tracker Bot is online');
 
   await rest.put(
@@ -297,24 +336,40 @@ interaction.reply({ embeds: [embed] });
 });
 
 
+// WEEKLY RESET: Monday at midnight
 cron.schedule('0 0 * * 1', async () => {
 
   const weekRange = getWeekRange();
 
+  console.log('Weekly reset starting...');
+
+  // 1. Archive current week to history
   await postFinalLeaderboard(WEEKLY_HISTORY, `Weekly Leaderboard (${weekRange})`, "weekly");
 
+  // 2. Clear stored message ID so a fresh message is posted
+  db.run(`DELETE FROM leaderboard_messages WHERE type = ?`, ['weekly']);
+
+  // 3. Update leaderboard with fresh message
   updateLeaderboard(WEEKLY_CHANNEL, "Weekly Leaderboard", "weekly");
 
   console.log('Weekly leaderboard reset');
 
 });
 
+// MONTHLY RESET: 1st of month at midnight
 cron.schedule('0 0 1 * *', async () => {
 
   const monthLabel = getMonthLabel();
 
+  console.log('Monthly reset starting...');
+
+  // 1. Archive previous month to history
   await postFinalLeaderboard(MONTHLY_HISTORY, `${monthLabel} Leaderboard`, "monthly");
 
+  // 2. Clear stored message ID so a fresh message is posted
+  db.run(`DELETE FROM leaderboard_messages WHERE type = ?`, ['monthly']);
+
+  // 3. Update leaderboard with fresh message
   updateLeaderboard(MONTHLY_CHANNEL, "Monthly AP Leaderboard", "monthly");
 
   console.log('Monthly leaderboard reset');
