@@ -12,7 +12,6 @@ const client = new Client({
 
 const db = new sqlite3.Database('./sales.db');
 
-// Main sales table
 db.run(`CREATE TABLE IF NOT EXISTS sales (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   agent TEXT,
@@ -21,7 +20,6 @@ db.run(`CREATE TABLE IF NOT EXISTS sales (
   date TEXT
 )`);
 
-// Store current message IDs (persists across bot restarts)
 db.run(`CREATE TABLE IF NOT EXISTS leaderboard_messages (
   type TEXT PRIMARY KEY,
   message_id TEXT,
@@ -46,12 +44,12 @@ const commands = [
         .setRequired(true))
   ,
   new SlashCommandBuilder()
-  .setName('delete')
-  .setDescription('Delete a sale')
-  .addIntegerOption(option =>
-    option.setName('id')
-      .setDescription('Sale ID')
-      .setRequired(true))
+    .setName('delete')
+    .setDescription('Delete a sale')
+    .addIntegerOption(option =>
+      option.setName('id')
+        .setDescription('Sale ID')
+        .setRequired(true))
 ].map(command => command.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -74,7 +72,6 @@ function getMonthLabel() {
   return `${month} ${year}`;
 }
 
-// Get stored message ID from database
 async function getStoredMessageId(type) {
   return new Promise((resolve) => {
     db.get(
@@ -88,7 +85,6 @@ async function getStoredMessageId(type) {
   });
 }
 
-// Save message ID to database
 function saveMessageId(type, messageId, channelId) {
   db.run(
     `INSERT OR REPLACE INTO leaderboard_messages (type, message_id, channel_id) VALUES (?, ?, ?)`,
@@ -105,7 +101,7 @@ async function updateLeaderboard(channelId, title, type) {
     const day = now.getDay();
     const diff = now.getDate() - day + (day === 0 ? -6 : 1);
     const start = new Date(now.setDate(diff));
-    start.setHours(0,0,0,0);
+    start.setHours(0, 0, 0, 0);
     dateFilter = start.toISOString();
   }
 
@@ -128,13 +124,17 @@ async function updateLeaderboard(channelId, title, type) {
       const medals = ["🥇", "🥈", "🥉"];
       let message = `🏆 **${title}**\n\n`;
 
-      rows.slice(0,10).forEach((row, index) => {
-        if (index < 3) {
-          message += `${medals[index]} ${row.agent} — $${row.total}\n`;
-        } else {
-          message += `${index+1}. ${row.agent} — $${row.total}\n`;
-        }
-      });
+      if (rows.length === 0) {
+        message += "No sales yet this period.";
+      } else {
+        rows.slice(0, 10).forEach((row, index) => {
+          if (index < 3) {
+            message += `${medals[index]} ${row.agent} — $${row.total}\n`;
+          } else {
+            message += `${index + 1}. ${row.agent} — $${row.total}\n`;
+          }
+        });
+      }
 
       try {
         const storedMessageId = await getStoredMessageId(type);
@@ -168,10 +168,10 @@ async function postFinalLeaderboard(channelId, title, type) {
     const now = new Date();
     const end = new Date(now);
     end.setDate(now.getDate() - now.getDay());
-    end.setHours(23,59,59,999);
+    end.setHours(23, 59, 59, 999);
     const start = new Date(end);
     start.setDate(end.getDate() - 6);
-    start.setHours(0,0,0,0);
+    start.setHours(0, 0, 0, 0);
     startDate = start.toISOString();
     endDate = end.toISOString();
   }
@@ -180,8 +180,8 @@ async function postFinalLeaderboard(channelId, title, type) {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const end = new Date(now.getFullYear(), now.getMonth(), 0);
-    start.setHours(0,0,0,0);
-    end.setHours(23,59,59,999);
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
     startDate = start.toISOString();
     endDate = end.toISOString();
   }
@@ -199,13 +199,17 @@ async function postFinalLeaderboard(channelId, title, type) {
       const medals = ["🥇", "🥈", "🥉"];
       let message = `📊 **${title}**\n\n`;
 
-      rows.slice(0,10).forEach((row, index) => {
-        if (index < 3) {
-          message += `${medals[index]} ${row.agent} — $${row.total}\n`;
-        } else {
-          message += `${index+1}. ${row.agent} — $${row.total}\n`;
-        }
-      });
+      if (rows.length === 0) {
+        message += "No sales this period.";
+      } else {
+        rows.slice(0, 10).forEach((row, index) => {
+          if (index < 3) {
+            message += `${medals[index]} ${row.agent} — $${row.total}\n`;
+          } else {
+            message += `${index + 1}. ${row.agent} — $${row.total}\n`;
+          }
+        });
+      }
 
       channel.send(message);
     }
@@ -217,7 +221,7 @@ client.once('clientReady', async () => {
 
   await rest.put(
     Routes.applicationCommands(client.user.id, "1325862542786039849"),
-    { body: commands },
+    { body: commands }
   );
 });
 
@@ -274,7 +278,6 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// WEEKLY RESET: Monday at midnight
 cron.schedule('0 0 * * 1', async () => {
   const weekRange = getWeekRange();
   console.log('Weekly reset starting...');
@@ -286,7 +289,6 @@ cron.schedule('0 0 * * 1', async () => {
   console.log('Weekly leaderboard reset');
 });
 
-// MONTHLY RESET: 1st of month at midnight
 cron.schedule('0 0 1 * *', async () => {
   const monthLabel = getMonthLabel();
   console.log('Monthly reset starting...');
