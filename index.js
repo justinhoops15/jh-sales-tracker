@@ -5,6 +5,7 @@ const MONTHLY_HISTORY = "1482171288918167765";
 const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder } = require('discord.js');
 const sqlite3 = require('sqlite3').verbose();
 const cron = require('node-cron');
+const http = require('http');
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
@@ -298,6 +299,22 @@ cron.schedule('0 0 1 * *', async () => {
   updateLeaderboard(MONTHLY_CHANNEL, "Monthly AP Leaderboard", "monthly");
 
   console.log('Monthly leaderboard reset');
+});
+
+// Health check server for Render
+const server = http.createServer((req, res) => {
+  if (req.url === '/' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Bot is running');
+  } else {
+    res.writeHead(404);
+    res.end('Not found');
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Health check server listening on port ${PORT}`);
 });
 
 client.login(process.env.TOKEN);
